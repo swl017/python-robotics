@@ -5,7 +5,7 @@ project(ekf)
 message(STATUS "Building ${CMAKE_PROJECT_NAME}")
 
 set(CMAKE_CXX_STANDARD 17)
-add_definitions(-DDebug)
+add_definitions(-DCMAKE_BUILD_TYPE=Debug)
 
 set(EIGEN_PATH "/Users/sw/Code/eigen-3.4.0/")
 

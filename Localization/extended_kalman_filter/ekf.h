@@ -21,14 +21,16 @@ public:
 
     MatrixXd getCovMat(const std::vector<double> &cov_vec);
     MatrixXd getCovMat(const MatrixXd &cov_vec);
-    MatrixXd setInputNoise(const std::vector<double> &cov_vec);
-    MatrixXd setSensorNoise(const std::vector<double> &cov_vec);
+    void setProcessNoiseCov(const MatrixXd &Q);
+    void setObservationNoiseCov(const MatrixXd &R);
+    void setInputNoise(const std::vector<double> &cov_vec);
+    void setSensorNoise(const std::vector<double> &cov_vec);
 
     /* Observations(Measurements)*/
-    MatrixXd getObservation(); // get measurement 
-    void setObservation(const MatrixXd &mat); // set measurement 
-    MatrixXd getControlInput(); // get u
-    void setControlInput(const VectorXd &vec); // set u
+    // MatrixXd getObservation(); // get measurement 
+    // void setObservation(const MatrixXd &mat); // set measurement 
+    // MatrixXd getControlInput(); // get u
+    // void setControlInput(const VectorXd &vec); // set u
 
     /* Predictions */
     VectorXd motionModel(const VectorXd &x, const VectorXd &u);
@@ -80,5 +82,5 @@ private:
     VectorXd _y; // Residual
     VectorXd _z; // Observation(measurement)
     VectorXd _z_pred; // Observation(measurement) prediction
-    VectorXd _ud; // Control input with noise
+    VectorXd _u; // Control input with noise
 };

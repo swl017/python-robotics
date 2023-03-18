@@ -8,9 +8,10 @@
 #include <cmath>
 // #include <Eigen/Dense>
 // #include <Eigen/Geometry>
-#include "Eigen/Eigen"
+#include <Eigen/Eigen>
 
 #include "ekf.h"
+#include "simulation_helper.h"
 
 using namespace std;
 using namespace Eigen;
@@ -28,6 +29,13 @@ _dt(dt)
     _B.resize(state_dim, input_dim);
     _H.resize(obs_dim, state_dim);
     _I_ss.resize(state_dim, state_dim);
+    
+    _x_true.resize(state_dim);
+    _x_pred.resize(state_dim);
+    _y.resize(obs_dim);
+    _z.resize(obs_dim);
+    _z_pred.resize(obs_dim);
+    _u.resize(input_dim);
 
     _input_noise.resize(input_dim, input_dim);
     _sensor_noise.resize(input_dim, input_dim);
@@ -57,48 +65,51 @@ MatrixXd EKF::getCovMat(const MatrixXd &cov_vec)
     return A;
 }
 
-MatrixXd EKF::setInputNoise(const std::vector<double> &cov_vec)
+void EKF::setProcessNoiseCov(const MatrixXd &Q)
+{
+    _Q = Q;
+}
+
+void EKF::setObservationNoiseCov(const MatrixXd &R)
+{
+    _R = R;
+}
+
+void EKF::setInputNoise(const std::vector<double> &cov_vec)
 {
     _input_noise = getCovMat(cov_vec);
 }
 
-MatrixXd EKF::setSensorNoise(const std::vector<double> &cov_vec)
+void EKF::setSensorNoise(const std::vector<double> &cov_vec)
 {
     _sensor_noise = getCovMat(cov_vec);
 }
 
-/**
- * @todo sensor measurement callback when implemented in real-time
-*/
-MatrixXd EKF::getObservation()
-{
-    return MatrixXd::Identity(_obs_dim, _state_dim); // temp
-}
+// /**
+//  * @todo sensor measurement callback when implemented in real-time
+// */
+// MatrixXd EKF::getObservation()
+// {
+//     return MatrixXd::Identity(_obs_dim, _state_dim); // temp
+// }
 
-void EKF::setObservation(const MatrixXd &mat)
-{
-    _z = mat;
-}
+// void EKF::setObservation(const MatrixXd &mat)
+// {
+//     _z = mat;
+// }
 
-MatrixXd EKF::getControlInput()
-{
-
-}
-
-void EKF::setControlInput(const VectorXd &vec)
-{
-    _ud = vec;
-}
+// void EKF::setControlInput(const VectorXd &vec)
+// {
+//     u = vec;
+// }
 
 VectorXd EKF::motionModel(const VectorXd &x, const VectorXd &u)
 {
-    MatrixXd F(_state_dim, _state_dim);
-    F << 1.0, 0.0, 0.0, 0.0,
+    MatrixXd A(_state_dim, _state_dim);
+    A << 1.0, 0.0, 0.0, 0.0,
          0.0, 1.0, 0.0, 0.0,
          0.0, 0.0, 1.0, 0.0,
          0.0, 0.0, 0.0, 0.0;
-
-    _F = F;
 
     MatrixXd B(_state_dim, _input_dim);
     B << _dt*cos(x(STATE_YAW)), 0.0,
@@ -106,7 +117,7 @@ VectorXd EKF::motionModel(const VectorXd &x, const VectorXd &u)
          0.0, _dt,
          1.0, 0.0;
 
-    return F * x + B * u;
+    return A * x + B * u;
 }
 
 /**
@@ -212,39 +223,87 @@ void EKF::ekfEstimation(VectorXd &x_est, MatrixXd &P_est, const VectorXd &z, con
 
 
 /**
- * @note The dimensions of the problem(4,2)
+ * @note The dimensions of the problem(4,2,2)
  *       x = [x, y, yaw, v]
  *       u = [v, yaw_rate]
+ *       z = [x, y]
 */
 int main()
 {
+    /* EKF parameters */
     int state_dim = 4;
     int input_dim = 2;
     int obs_dim = 2;
     double dt = 0.1;
     EKF ekf(state_dim, input_dim, obs_dim, dt);
-    vector<double> q({0.1, 0.1, 0.01, 1.0});
+
+    /* EKF Tunning factors */
+    MatrixXd Q = ekf.getCovMat(vector<double>({0.1, 0.1, 0.01, 1.0}));
+    MatrixXd R = ekf.getCovMat(vector<double>({1.0, 1.0}));
+    ekf.setProcessNoiseCov(Q);
+    ekf.setObservationNoiseCov(R);
+
+    /* Parameters for generating a simulation */
+    MatrixXd input_noise = ekf.getCovMat(vector<double>({1.0, 0.5}));
+    MatrixXd observation_noise = ekf.getCovMat(vector<double>({0.5, 0.5}));
+
+    double dt_sim = 0.01;
+    double sim_duration = 1.0;
+    double sim_time = 0.0;
+    double ekf_timer = 0.0;
+
+    /* Initial values */
+    // simulation ground truth
+    VectorXd x_true(state_dim);
+    x_true << 1.0, 0.0, M_PI_2, 0.0;
+    VectorXd u_true(input_dim);
+    u_true << 0.0, 0.0;
+    // No EKF estimation
+    VectorXd x_deadreck(state_dim);
+    x_deadreck << 1.0, 0.0, M_PI_2, 0.0;
+    // EKF estimation
+    VectorXd x_est(state_dim);
+    x_est << 1.0, 0.0, M_PI_2, 0.0;
+    MatrixXd P_est(state_dim, state_dim);
+    P_est = MatrixXd::Identity(state_dim, state_dim);
+    // Measured control input containing noise
+    VectorXd u(input_dim);
+    u << 0.0, 0.0;
+    // Observation
+    VectorXd z(obs_dim);
+    z << 0.0, 0.0;
+
+    /* Simulation loop */
+    while(sim_time < sim_duration)
+    {
+        // Update the simulation one step
+        sim_time += dt_sim;
+        ekf_timer += dt_sim;
+        calcInput(sim_time, u_true);
+        x_true = ekf.motionModel(x_true, u_true);
+
+        if(ekf_timer > dt)
+        {
+            // Generate measurements
+            z = ekf.observationModel(x_true) + observation_noise * VectorXd::Random(obs_dim);
+            // cout << u_true << endl;
+            // cout << input_noise << endl;
+            // auto v = VectorXd::Random(input_dim);
+            // cout << v << endl;
+            u = u_true + input_noise * VectorXd::Random(input_dim);
+
+            // Update dead-reckoning
+            x_deadreck = ekf.motionModel(x_deadreck, u);
+
+            // Perform EKF estimation
+            ekf.ekfEstimation(x_est, P_est, z, u);
+
+            // Reset timer
+            ekf_timer = 0;
+        }
+    }
     
-    /* Process Noise Covariance */
-    MatrixXd Q = ekf.getCovMat(q);
-
-    cout << "Q:\n" << Q << endl;
-
-    /* Observation Noise Covariance*/
-    MatrixXd R = ekf.getCovMat(vector<double>({
-                    pow(1.0, 2),
-                    pow(1.0, 2)
-                    }));
-    cout << "R:\n" << R << endl;
-
-    MatrixXd input_noise = ekf.getCovMat(vector<double>({
-                                pow(0.1, 2),
-                                pow(0.1, 2),
-                                pow(0.01, 2),
-                                pow(1.0, 2)
-                                }));
-
-    
+    cout << "Simulation Completed." << endl;
 
     return 0;
 }
