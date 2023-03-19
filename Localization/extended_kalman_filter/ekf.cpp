@@ -12,6 +12,7 @@
 
 #include "ekf.h"
 #include "simulation_helper.h"
+#include "matplotlibcpp/matplotlibcpp.h"
 
 using namespace std;
 using namespace Eigen;
@@ -286,13 +287,9 @@ int main()
         {
             // Generate measurements
             z = ekf.observationModel(x_true) + observation_noise * VectorXd::Random(obs_dim);
-            // cout << u_true << endl;
-            // cout << input_noise << endl;
-            // auto v = VectorXd::Random(input_dim);
-            // cout << v << endl;
             u = u_true + input_noise * VectorXd::Random(input_dim);
 
-            // Update dead-reckoning
+            // Update dead-reckoning(for comparison)
             x_deadreck = ekf.motionModel(x_deadreck, u);
 
             // Perform EKF estimation
@@ -301,6 +298,9 @@ int main()
             // Reset timer
             ekf_timer = 0;
         }
+
+        /* matplotlibcpp */
+
     }
     
     cout << "Simulation Completed." << endl;
