@@ -38,25 +38,24 @@ public:
 
     /* Update */
     VectorXd observationModel(const VectorXd &x);
-    template <typename T>
-    void jacob_h(const VectorXd &x, T &H);
+    MatrixXd jacob_h(const VectorXd &x);
+    // template <typename T>
+    // void jacob_h(const VectorXd &x, T &H);
 
     /* EKF */
     void ekfEstimation(VectorXd &x_est, MatrixXd &P_est, const VectorXd &z, const MatrixXd &u);
 
     /* Types */
-    enum STATE_INDEX
+    enum INDEX
     {
         STATE_X = 0,
         STATE_Y = 1,
         STATE_YAW = 2,
         STATE_V = 3,
-    };
-
-    enum INPUT_INDEX
-    {
         INPUT_V = 0,
         INPUT_YAWRATE = 1,
+        OBS_X = 0,
+        OBS_Y = 1,
     };
 
     /* Variables */

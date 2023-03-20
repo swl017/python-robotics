@@ -16,6 +16,7 @@
 
 using namespace std;
 using namespace Eigen;
+namespace plt = matplotlibcpp;
 
 EKF::EKF(const int &state_dim, const int &input_dim, const int &obs_dim, const double &dt) :
 _state_dim(state_dim),
@@ -143,7 +144,7 @@ MatrixXd EKF::jacob_f(const VectorXd &x, const VectorXd &u)
     jacob_f << 1.0, 0.0, -v*_dt*sin(yaw), _dt*cos(yaw),
                0.0, 1.0,  v*_dt*cos(yaw), _dt*sin(yaw),
                0.0, 0.0, 1.0, 0.0,
-               0.0, 0.0, 0.0, 0.0;
+               0.0, 0.0, 0.0, 1.0;
             
     return jacob_f;
 }
@@ -164,21 +165,21 @@ VectorXd EKF::observationModel(const VectorXd &x)
     return H * x;
 }
 
-// MatrixXd EKF::jacob_h(const VectorXd &x)
-// {
-//     MatrixXd jacob_h(_obs_dim, _state_dim);
-//     jacob_h << 1.0, 0.0, 0.0, 0.0,
-//               0.0, 1.0, 0.0, 0.0;
-            
-//     return jacob_h;
-// }
-
-template <typename T>
-void EKF::jacob_h(const VectorXd &x, T &H)
+MatrixXd EKF::jacob_h(const VectorXd &x)
 {
-    H << 1.0, 0.0, 0.0, 0.0,
-         0.0, 1.0, 0.0, 0.0;
+    MatrixXd jacob_h(_obs_dim, _state_dim);
+    jacob_h << 1.0, 0.0, 0.0, 0.0,
+              0.0, 1.0, 0.0, 0.0;
+            
+    return jacob_h;
 }
+
+// template <typename T>
+// void EKF::jacob_h(const VectorXd &x, T &H)
+// {
+//     H << 1.0, 0.0, 0.0, 0.0,
+//          0.0, 1.0, 0.0, 0.0;
+// }
 
 /**
  * @brief Compute EKF estimation.
@@ -213,8 +214,7 @@ void EKF::ekfEstimation(VectorXd &x_est, MatrixXd &P_est, const VectorXd &z, con
     /* Update */
     _z_pred = observationModel(_x_pred);
     _y = _z - _z_pred;
-    MatrixXd H(_obs_dim, _state_dim);
-    jacob_h(_x_pred, H);
+    MatrixXd H = jacob_h(_x_pred);
     MatrixXd S = H * _P_pred * H.transpose() + _R;
     MatrixXd K = _P_pred * H.transpose() * S.inverse();
     x_est = _x_pred + K * _y;
@@ -235,7 +235,7 @@ int main()
     int state_dim = 4;
     int input_dim = 2;
     int obs_dim = 2;
-    double dt = 0.1;
+    double dt = 0.01;
     EKF ekf(state_dim, input_dim, obs_dim, dt);
 
     /* EKF Tunning factors */
@@ -245,26 +245,31 @@ int main()
     ekf.setObservationNoiseCov(R);
 
     /* Parameters for generating a simulation */
+    // MatrixXd input_noise = ekf.getCovMat(vector<double>({1.0, 0.5}));
+    // MatrixXd observation_noise = ekf.getCovMat(vector<double>({0.5, 0.5}));
     MatrixXd input_noise = ekf.getCovMat(vector<double>({1.0, 0.5}));
     MatrixXd observation_noise = ekf.getCovMat(vector<double>({0.5, 0.5}));
 
     double dt_sim = 0.01;
-    double sim_duration = 1.0;
+    double sim_duration = 50.0;
     double sim_time = 0.0;
     double ekf_timer = 0.0;
 
     /* Initial values */
     // simulation ground truth
     VectorXd x_true(state_dim);
-    x_true << 1.0, 0.0, M_PI_2, 0.0;
+    x_true << 0.0, 0.0, 0.0, 0.0;
+        // x_true << 1.0, 0.0, M_PI_2, 0.0;
     VectorXd u_true(input_dim);
     u_true << 0.0, 0.0;
     // No EKF estimation
     VectorXd x_deadreck(state_dim);
-    x_deadreck << 1.0, 0.0, M_PI_2, 0.0;
+    x_deadreck << 0.0, 0.0, 0.0, 0.0;
+        // x_deadreck << 1.0, 0.0, M_PI_2, 0.0;
     // EKF estimation
     VectorXd x_est(state_dim);
-    x_est << 1.0, 0.0, M_PI_2, 0.0;
+    x_est << 0.0, 0.0, 0.0, 0.0;
+        // x_est << 1.0, 0.0, M_PI_2, 0.0;
     MatrixXd P_est(state_dim, state_dim);
     P_est = MatrixXd::Identity(state_dim, state_dim);
     // Measured control input containing noise
@@ -273,6 +278,12 @@ int main()
     // Observation
     VectorXd z(obs_dim);
     z << 0.0, 0.0;
+
+    /* Variables for plotting */
+    state_x plt_x_true, plt_x_deadreck, plt_x_est;
+    obs_z plt_z;
+    input_u plt_u;
+    int i = 0;
 
     /* Simulation loop */
     while(sim_time < sim_duration)
@@ -283,10 +294,12 @@ int main()
         calcInput(sim_time, u_true);
         x_true = ekf.motionModel(x_true, u_true);
 
-        if(ekf_timer > dt)
+        if(true)
+        // if(ekf_timer >= dt)
         {
             // Generate measurements
             z = ekf.observationModel(x_true) + observation_noise * VectorXd::Random(obs_dim);
+            cout << VectorXd::Random(obs_dim) << endl;
             u = u_true + input_noise * VectorXd::Random(input_dim);
 
             // Update dead-reckoning(for comparison)
@@ -300,6 +313,51 @@ int main()
         }
 
         /* matplotlibcpp */
+        plt_x_true.x.push_back(x_true(EKF::INDEX::STATE_X));
+        plt_x_true.y.push_back(x_true(EKF::INDEX::STATE_Y));
+        plt_x_true.yaw.push_back(x_true(EKF::INDEX::STATE_YAW));
+        plt_x_true.v.push_back(x_true(EKF::INDEX::STATE_V));
+        plt_x_deadreck.x.push_back(x_deadreck(EKF::INDEX::STATE_X));
+        plt_x_deadreck.y.push_back(x_deadreck(EKF::INDEX::STATE_Y));
+        plt_x_deadreck.yaw.push_back(x_deadreck(EKF::INDEX::STATE_YAW));
+        plt_x_deadreck.v.push_back(x_deadreck(EKF::INDEX::STATE_V));
+        plt_x_est.x.push_back(x_est(EKF::INDEX::STATE_X));
+        plt_x_est.y.push_back(x_est(EKF::INDEX::STATE_Y));
+        plt_x_est.yaw.push_back(x_est(EKF::INDEX::STATE_YAW));
+        plt_x_est.v.push_back(x_est(EKF::INDEX::STATE_V));
+
+        plt_z.x.push_back(z(EKF::INDEX::OBS_X));
+        plt_z.y.push_back(z(EKF::INDEX::OBS_Y));
+
+        plt_u.v.push_back(u(EKF::INDEX::INPUT_V));
+        plt_u.yaw_rate.push_back(u(EKF::INDEX::INPUT_YAWRATE));
+
+        if (i % 10 == 0) {
+			// Clear previous plot
+			plt::clf();
+			// Plot line from given x and y data. Color is selected automatically.
+			plt::named_plot("x_true", plt_x_true.x, plt_x_true.y);
+			// Plot a line whose name will show up as "log(x)" in the legend.
+			plt::named_plot("x_deadreck", plt_x_deadreck.x, plt_x_deadreck.y);
+			plt::named_plot("x_est", plt_x_est.x, plt_x_est.y);
+			plt::plot(plt_z.x, plt_z.y, ".");
+
+            vector<double> px, py;
+            plotCovEllipse(x_est, P_est, px, py);
+            plt::named_plot("P_est", px, py);
+
+			// Set x-axis to interval [0,1000000]
+			// plt::xlim(0, n*n);
+
+			// Add graph title
+			plt::title("Sample figure");
+			// Enable legend.
+			plt::legend();
+			// Display plot continuously
+			plt::pause(0.1);
+		}
+        i++;
+
 
     }
     
