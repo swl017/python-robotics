@@ -68,7 +68,7 @@ void plotCovEllipse(const VectorXd &x_est, const MatrixXd &cov, std::vector<doub
     double a = sqrt(e_val[bigind]);
     double b = sqrt(e_val[smallind]);
 
-    const int samples = 8;
+    const int samples = 32;
     MatrixXd sample_xy(samples, 2);
     for(int i = 0; i < samples; i++)
     {

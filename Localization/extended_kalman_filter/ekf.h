@@ -44,6 +44,9 @@ public:
 
     /* EKF */
     void ekfEstimation(VectorXd &x_est, MatrixXd &P_est, const VectorXd &z, const MatrixXd &u);
+    void ekfPrediction(VectorXd &x_est, MatrixXd &P_est, const MatrixXd &u);
+    void ekfCorrection(VectorXd &x_est, MatrixXd &P_est, const MatrixXd &z);
+
 
     /* Types */
     enum INDEX

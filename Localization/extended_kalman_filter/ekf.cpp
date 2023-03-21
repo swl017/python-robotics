@@ -237,7 +237,30 @@ void EKF::ekfEstimation(VectorXd &x_est, MatrixXd &P_est, const VectorXd &z, con
     // cout << "P_est" << P_est << endl;
     // cout << "================" << endl;
 
+}
 
+void EKF::ekfPrediction(VectorXd &x_est, MatrixXd &P_est, const MatrixXd &u)
+{
+    /* Predict */
+    _x_pred = motionModel(x_est, u);
+    _F = jacob_f(x_est, u);
+    _P_pred = _F * P_est * _F.transpose() + _Q;
+
+    /* Return Predictions */
+    x_est = _x_pred;
+    P_est = _P_pred;
+}
+
+void EKF::ekfCorrection(VectorXd &x_est, MatrixXd &P_est, const MatrixXd &z)
+{
+    /* Update */
+    _z_pred = observationModel(_x_pred);
+    _y = z - _z_pred;
+    MatrixXd H = jacob_h(_x_pred);
+    MatrixXd S = H * _P_pred * H.transpose() + _R;
+    MatrixXd K = _P_pred * H.transpose() * S.inverse();
+    x_est = _x_pred + K * _y;
+    P_est = (_I_ss - K * H) * _P_pred;
 }
 
 
@@ -253,7 +276,7 @@ int main()
     int state_dim = 4;
     int input_dim = 2;
     int obs_dim = 2;
-    double dt = 0.1;
+    double dt = 0.05;
     EKF ekf(state_dim, input_dim, obs_dim, dt);
 
     /* EKF Tunning factors */
@@ -268,7 +291,7 @@ int main()
     MatrixXd input_noise = ekf.getCovMat(vector<double>({1.0, 0.5}));
     MatrixXd observation_noise = ekf.getCovMat(vector<double>({0.5, 0.5}));
 
-    double dt_sim = 0.1;
+    double dt_sim = 0.01;
     double sim_duration = 500.0;
     double sim_time = 0.0;
     double ekf_timer = 0.0;
@@ -283,11 +306,9 @@ int main()
     // No EKF estimation
     VectorXd x_deadreck(state_dim);
     x_deadreck << 0.0, 0.0, 0.0, 0.0;
-        // x_deadreck << 1.0, 0.0, M_PI_2, 0.0;
     // EKF estimation
     VectorXd x_est(state_dim);
     x_est << 0.0, 0.0, 0.0, 0.0;
-        // x_est << 1.0, 0.0, M_PI_2, 0.0;
     MatrixXd P_est(state_dim, state_dim);
     P_est = MatrixXd::Identity(state_dim, state_dim);
     // Measured control input containing noise
@@ -312,22 +333,33 @@ int main()
         calcInput(sim_time, u_true);
         x_true = ekf.motionModel(x_true, u_true);
 
-        if(true)
-        // if(ekf_timer >= dt)
+        // Generate measurements for predictions
+        u = u_true + input_noise * VectorXd::Random(input_dim);
+
+        // Update dead-reckoning(for comparison)
+        x_deadreck = ekf.motionModel(x_deadreck, u);
+
+        // EKF Prediction
+        ekf.ekfPrediction(x_est, P_est, u);
+        // x_pred = x_est; // Auxiliary and redundant (for clarity)
+        // P_pred = P_est; // Auxiliary and redundant (for clarity)
+        
+        // if(true)
+        if(ekf_timer >= dt)
         {
-            // Generate measurements
+            // Generate measurements for corrections
             z = ekf.observationModel(x_true) + observation_noise * VectorXd::Random(obs_dim);
-            u = u_true + input_noise * VectorXd::Random(input_dim);
 
-            // Update dead-reckoning(for comparison)
-            x_deadreck = ekf.motionModel(x_deadreck, u);
-
-            // Perform EKF estimation
-            ekf.ekfEstimation(x_est, P_est, z, u);
+            // EKF Correction
+            // ekf.ekfCorrection(x_pred, P_pred, z); // Auxiliary and redundant (for clarity)
+            ekf.ekfCorrection(x_est, P_est, z); // Auxiliary and redundant (for clarity)
 
             // Reset timer
             ekf_timer = 0;
         }
+
+        // x_est = x_pred; // Auxiliary and redundant (for clarity)
+        // P_est = P_pred; // Auxiliary and redundant (for clarity)
 
         /* matplotlibcpp */
         plt_x_true.x.push_back(x_true(EKF::INDEX::STATE_X));
@@ -349,9 +381,12 @@ int main()
         plt_u.v.push_back(u(EKF::INDEX::INPUT_V));
         plt_u.yaw_rate.push_back(u(EKF::INDEX::INPUT_YAWRATE));
 
-        if (i % 10 == 0) {
+        if (true) {
+        // if (i % 10 == 0) {
 			// Clear previous plot
 			plt::clf();
+            plt::axis("equal");
+            // plt::plot(vector<double>({0}), vector<double>({10}), ".b");
 			// Plot line from given x and y data. Color is selected automatically.
 			plt::named_plot("x_true", plt_x_true.x, plt_x_true.y);
 			plt::named_plot("x_deadreck", plt_x_deadreck.x, plt_x_deadreck.y);
@@ -361,6 +396,10 @@ int main()
             vector<double> px, py;
             plotCovEllipse(x_est, P_est, px, py);
             plt::plot(px, py, "--r");
+            if(ekf_timer < dt_sim) 
+            {
+                // plt::plot(vector<double>({0}), vector<double>({10}), ".r");
+            }
 
 			// Set x-axis to interval [0,1000000]
 			// plt::xlim(0, n*n);
@@ -369,7 +408,6 @@ int main()
 			plt::title("Dead Reckoning vs. EKF");
 			// Enable legend.
 			plt::legend();
-            plt::axis("equal");
 			// Display plot continuously
 			plt::pause(0.1);
 		}
