@@ -10,6 +10,7 @@
 #include "matplotlibcpp/matplotlibcpp.h"
 namespace plt = matplotlibcpp;
 
+using namespace std;
 using namespace Eigen;
 
 /* Data structs for plotting */
@@ -47,6 +48,7 @@ void calcInput(const double &t, VectorXd &u)
 
 void plotCovEllipse(const VectorXd &x_est, const MatrixXd &cov, std::vector<double> &px, std::vector<double> &py)
 {
+    // eigenvalue reference: https://eigen.tuxfamily.org/dox/classEigen_1_1EigenSolver.html#a0ccaeb4f7d44c18af60a7b3a1dd91f7a
     MatrixXd A = cov.block(0,0,2,2);
     EigenSolver<MatrixXd> es(A);
     complex<double> lambda = es.eigenvalues()[0];
@@ -54,8 +56,8 @@ void plotCovEllipse(const VectorXd &x_est, const MatrixXd &cov, std::vector<doub
     std::vector<double> e_val({es.eigenvalues()[0].real(), es.eigenvalues()[1].real()});
 
     VectorXcd v = es.eigenvectors().col(0);
-    cout << "If v is the corresponding eigenvector, then lambda * v = " << endl << lambda * v << endl;
-    cout << "... and A * v = " << endl << A.cast<complex<double> >() * v << endl << endl;
+    // cout << "If v is the corresponding eigenvector, then lambda * v = " << endl << lambda * v << endl;
+    // cout << "... and A * v = " << endl << A.cast<complex<double> >() * v << endl << endl;
     
     int bigind, smallind;
     bigind = e_val[0] > e_val[1] ? 0 : 1;
@@ -70,8 +72,8 @@ void plotCovEllipse(const VectorXd &x_est, const MatrixXd &cov, std::vector<doub
     MatrixXd sample_xy(samples, 2);
     for(int i = 0; i < samples; i++)
     {
-        sample_xy(i, 0) = a * cos(i * M_2_PI / samples);
-        sample_xy(i, 1) = b * sin(i * M_2_PI / samples);
+        sample_xy(i, 0) = a * cos(i * 2 * M_PI / samples);
+        sample_xy(i, 1) = b * sin(i * 2 * M_PI / samples);
     }
 
     double angle = atan2(e_vec_big[1], e_vec_big[0]);
@@ -84,6 +86,12 @@ void plotCovEllipse(const VectorXd &x_est, const MatrixXd &cov, std::vector<doub
         px.push_back(xy(0) + x_est(0));
         py.push_back(xy(1) + x_est(1));
     }
+    if(px.size() > 0 && py.size() > 0)
+    {
+        px.push_back(px[0]);
+        py.push_back(py[0]);
+    } 
+
 
     // plt::plot(px, py, "--r");
 

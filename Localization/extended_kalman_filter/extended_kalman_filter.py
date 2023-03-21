@@ -28,7 +28,7 @@ R = np.diag([1.0, 1.0]) ** 2  # Observation x,y position covariance
 INPUT_NOISE = np.diag([1.0, np.deg2rad(30.0)]) ** 2
 GPS_NOISE = np.diag([0.5, 0.5]) ** 2
 
-DT = 0.01  # time tick [s]
+DT = 0.1  # time tick [s]
 SIM_TIME = 50.0  # simulation time [s]
 
 show_animation = True

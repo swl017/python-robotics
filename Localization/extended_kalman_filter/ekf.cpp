@@ -42,7 +42,7 @@ _dt(dt)
     _input_noise.resize(input_dim, input_dim);
     _sensor_noise.resize(input_dim, input_dim);
 
-    MatrixXd I_ss = MatrixXd::Identity(state_dim, state_dim);
+    _I_ss = MatrixXd::Identity(state_dim, state_dim);
 }
 
 EKF::~EKF()
@@ -114,8 +114,8 @@ VectorXd EKF::motionModel(const VectorXd &x, const VectorXd &u)
          0.0, 0.0, 0.0, 0.0;
 
     MatrixXd B(_state_dim, _input_dim);
-    B << _dt*cos(x(STATE_YAW)), 0.0,
-         _dt*sin(x(STATE_YAW)), 0.0,
+    B << _dt*cos(x(INDEX::STATE_YAW)), 0.0,
+         _dt*sin(x(INDEX::STATE_YAW)), 0.0,
          0.0, _dt,
          1.0, 0.0;
 
@@ -138,8 +138,8 @@ VectorXd EKF::motionModel(const VectorXd &x, const VectorXd &u)
 */
 MatrixXd EKF::jacob_f(const VectorXd &x, const VectorXd &u)
 {
-    double yaw = x(STATE_YAW);
-    double v = u(INPUT_V);
+    double yaw = x(INDEX::STATE_YAW);
+    double v = u(INDEX::INPUT_V);
     MatrixXd jacob_f(_state_dim, _state_dim);
     jacob_f << 1.0, 0.0, -v*_dt*sin(yaw), _dt*cos(yaw),
                0.0, 1.0,  v*_dt*cos(yaw), _dt*sin(yaw),
@@ -169,7 +169,7 @@ MatrixXd EKF::jacob_h(const VectorXd &x)
 {
     MatrixXd jacob_h(_obs_dim, _state_dim);
     jacob_h << 1.0, 0.0, 0.0, 0.0,
-              0.0, 1.0, 0.0, 0.0;
+               0.0, 1.0, 0.0, 0.0;
             
     return jacob_h;
 }
@@ -210,15 +210,33 @@ void EKF::ekfEstimation(VectorXd &x_est, MatrixXd &P_est, const VectorXd &z, con
     _x_pred = motionModel(x_est, u);
     _F = jacob_f(x_est, u);
     _P_pred = _F * P_est * _F.transpose() + _Q;
+    // cout << "x_est" << x_est << endl;
+    // cout << "u" << u << endl;
+    // cout << "_x_pred" << _x_pred << endl;
+    // cout << "_F" << _F << endl;
+    // cout << "_Q" << _Q << endl;
+    // cout << "P_est" << P_est << endl;
+    // cout << "_P_pred" << _P_pred << endl;
 
     /* Update */
     _z_pred = observationModel(_x_pred);
-    _y = _z - _z_pred;
+    _y = z - _z_pred;
     MatrixXd H = jacob_h(_x_pred);
     MatrixXd S = H * _P_pred * H.transpose() + _R;
     MatrixXd K = _P_pred * H.transpose() * S.inverse();
     x_est = _x_pred + K * _y;
     P_est = (_I_ss - K * H) * _P_pred;
+    // cout << "z" << z << endl;
+    // cout << "_z_pred" << _z_pred << endl;
+    // cout << "_y" << _y << endl;
+    // cout << "H" << H << endl;
+    // cout << "S" << S << endl;
+    // cout << "K" << K << endl;
+    // cout << "x_est" << x_est << endl;
+    // cout << "_I_ss" << _I_ss << endl;
+    // cout << "P_est" << P_est << endl;
+    // cout << "================" << endl;
+
 
 }
 
@@ -235,7 +253,7 @@ int main()
     int state_dim = 4;
     int input_dim = 2;
     int obs_dim = 2;
-    double dt = 0.01;
+    double dt = 0.1;
     EKF ekf(state_dim, input_dim, obs_dim, dt);
 
     /* EKF Tunning factors */
@@ -250,8 +268,8 @@ int main()
     MatrixXd input_noise = ekf.getCovMat(vector<double>({1.0, 0.5}));
     MatrixXd observation_noise = ekf.getCovMat(vector<double>({0.5, 0.5}));
 
-    double dt_sim = 0.01;
-    double sim_duration = 50.0;
+    double dt_sim = 0.1;
+    double sim_duration = 500.0;
     double sim_time = 0.0;
     double ekf_timer = 0.0;
 
@@ -299,7 +317,6 @@ int main()
         {
             // Generate measurements
             z = ekf.observationModel(x_true) + observation_noise * VectorXd::Random(obs_dim);
-            cout << VectorXd::Random(obs_dim) << endl;
             u = u_true + input_noise * VectorXd::Random(input_dim);
 
             // Update dead-reckoning(for comparison)
@@ -337,22 +354,22 @@ int main()
 			plt::clf();
 			// Plot line from given x and y data. Color is selected automatically.
 			plt::named_plot("x_true", plt_x_true.x, plt_x_true.y);
-			// Plot a line whose name will show up as "log(x)" in the legend.
 			plt::named_plot("x_deadreck", plt_x_deadreck.x, plt_x_deadreck.y);
 			plt::named_plot("x_est", plt_x_est.x, plt_x_est.y);
 			plt::plot(plt_z.x, plt_z.y, ".");
 
             vector<double> px, py;
             plotCovEllipse(x_est, P_est, px, py);
-            plt::named_plot("P_est", px, py);
+            plt::plot(px, py, "--r");
 
 			// Set x-axis to interval [0,1000000]
 			// plt::xlim(0, n*n);
 
 			// Add graph title
-			plt::title("Sample figure");
+			plt::title("Dead Reckoning vs. EKF");
 			// Enable legend.
 			plt::legend();
+            plt::axis("equal");
 			// Display plot continuously
 			plt::pause(0.1);
 		}
